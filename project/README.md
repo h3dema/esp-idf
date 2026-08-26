@@ -1,0 +1,1 @@
+`blink` is based on [blink example](https://github.com/espressif/esp-idf/blob/master/examples/get-started/blink/README.md).
