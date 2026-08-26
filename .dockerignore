@@ -1,0 +1,7 @@
+# .dockerignore
+.git
+*.md
+*.log
+.DS_Store
+project/build/
+project/sdkconfig

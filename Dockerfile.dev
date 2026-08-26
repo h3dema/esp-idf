@@ -1,0 +1,37 @@
+# Dockerfile
+FROM espressif/idf:latest
+
+# Install additional packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    vim \
+    nano \
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# Add useful aliases
+RUN echo 'alias ll="ls -alF"' >> ~/.bashrc && \
+    echo 'alias build="idf.py build"' >> ~/.bashrc && \
+    echo 'alias flash="idf.py -p /dev/ttyUSB0 flash"' >> ~/.bashrc && \
+    echo 'alias monitor="idf.py -p /dev/ttyUSB0 monitor"' >> ~/.bashrc && \
+    echo 'alias menuconfig="idf.py menuconfig"' >> ~/.bashrc
+
+# The official image's entrypoint and environment are preserved
+WORKDIR /project
+
+RUN echo '#!/bin/bash\n\
+pip3 install --upgrade pip && \
+pip3 install \
+    pytest \
+    pylint \
+    black \
+    esp-idf-monitor\n' > /pip-extras.sh && \
+    chmod +x /pip-extras.sh
+
+# DON'T override ENTRYPOINT or CMD unless you know what you're doing
+# The official image's entrypoint sources the environment properly
+
+# to guarantee that all environmental variables are set
+RUN echo "source /opt/esp/idf/export.sh" >> /etc/bash.bashrc

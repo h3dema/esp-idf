@@ -1,0 +1,71 @@
+{
+  "name": "ESP-IDF Dev Container",
+  // Point to your docker-compose.yml file in the project root
+  "dockerComposeFile": ["../docker-compose.yaml"],
+  // The name of the service in your compose file (must match)
+  "service": "esp-idf-dev",
+  // The path inside the container where your project is mounted
+  "workspaceFolder": "/project",
+  // Run this command after the container is created to check the environment
+  "postCreateCommand": "bash -lc 'source /opt/esp/idf/export.sh && idf.py --version && python3 --version'",
+  // Optional: Stop the compose project when the VS Code window is closed
+  "shutdownAction": "stopCompose",
+  "overrideCommand": false,
+  "remoteUser": "root",
+  "containerUser": "root",
+  "customizations": {
+    "vscode": {
+      // Recommended extensions for ESP-IDF development
+      "extensions": [
+        "espressif.esp-idf-extension",
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "ms-python.python",
+        "ms-vscode.makefile-tools"
+      ],
+      "settings": {
+        // Tell the ESP-IDF extension where to find tools inside the container
+        "idf.espIdfPath": "/opt/esp/idf",
+        "idf.toolsPath": "/opt/esp",
+
+        // C/C++ settings
+        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+        "C_Cpp.default.includePath": [
+          "${workspaceFolder}/**",
+          "/opt/esp/idf/components/**",
+          "/opt/esp/idf/components/freertos/include/**",
+          "/opt/esp/idf/components/esp_common/include/**"
+        ],
+        "C_Cpp.default.defines": [
+          "ESP_PLATFORM",
+          "IDF_VER=\"v6.2\""
+        ],
+        "C_Cpp.default.cStandard": "c17",
+        "C_Cpp.default.cppStandard": "c++20",
+
+        // Python settings
+        "python.defaultInterpreterPath": "/opt/esp/tools/python_env/idf6.2_py3.12_env/bin/python",
+        "python.terminal.activateEnvironment": true,
+
+        // Editor settings
+        "editor.formatOnSave": true,
+        "files.associations": {
+          "*.c": "c",
+          "*.h": "c",
+          "*.cpp": "cpp"
+        }
+      },
+
+      // Configure the terminal to use the ESP-IDF bash shell
+      "terminal.integrated.shellIntegration.enabled": true,
+      "terminal.integrated.defaultProfile.linux": "bash",
+      "terminal.integrated.profiles.linux": {
+        "bash": {
+          "path": "/bin/bash",
+          "args": ["-l"]
+        }
+      }
+
+    }
+  }
+}

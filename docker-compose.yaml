@@ -1,0 +1,53 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  esp-idf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      -  ${PROJECT_PATH:-./project}:/project
+    working_dir: /project
+    environment:
+      - IDF_TOOLS_PATH=/opt/esp/tools
+    stdin_open: true
+    tty: true
+    command: idf.py build
+
+   # Development service with interactive shell
+  esp-idf-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ${PROJECT_PATH:-./project}:/project
+    working_dir: /project
+    stdin_open: true
+    tty: true
+    environment:
+      - HOME=/home/esp
+      - LC_ALL=C.UTF-8
+      - LANG=C.UTF-8
+
+  # Flash service (with USB access)
+  esp-idf-flash:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./project:/project
+    working_dir: /project
+    environment:
+      - IDF_TOOLS_PATH=/opt/esp/tools
+      - ESPPORT=/dev/ttyUSB0
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyACM0:/dev/ttyACM0
+    stdin_open: true
+    tty: true
+    command: idf.py -p /dev/ttyUSB0 flash
+
+
+volumes:
+  esp-tools:
