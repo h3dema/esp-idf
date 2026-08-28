@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: esp-idf
     volumes:
       -  ${PROJECT_PATH:-./project}:/project
     working_dir: /project
@@ -20,6 +21,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    image: esp-idf-dev
     volumes:
       - ${PROJECT_PATH:-./project}:/project
     working_dir: /project
@@ -35,6 +37,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: esp-idf-flash
     volumes:
       - ./project:/project
     working_dir: /project
@@ -48,6 +51,21 @@ services:
     tty: true
     command: idf.py -p /dev/ttyUSB0 flash
 
+  esp-idf-arduino:
+    build:
+      context: .
+      dockerfile: darduino/Dockerfile
+    image: esp-idf-arduino
+    network_mode: "host"
+    environment:
+      - "DISPLAY=${DISPLAY}"
+    volumes:
+      - "/tmp/.X11-unix:/tmp/.X11-unix"
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+      - "${HOME}/topics:/topics"
+      - ${PWD}/Arduino:/home/developer/Arduino/projects
+    command: "arduino-ide"
+    privileged: true
 
 volumes:
   esp-tools:

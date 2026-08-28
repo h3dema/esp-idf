@@ -51,15 +51,21 @@ RUN curl -fsSL https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Linux
     && chmod +x /usr/local/bin/arduino-cli \
     && rm /tmp/arduino-cli.tar.gz
 
-# Add ESP32 board manager URL
+# Add ESP32 and STM32 board manager URLs
 RUN arduino-cli config init \
     && arduino-cli config add board_manager.additional_urls \
-       https://espressif.github.io/arduino-esp32/package_esp32_index.json
+       https://espressif.github.io/arduino-esp32/package_esp32_index.json \
+    && arduino-cli config add board_manager.additional_urls \
+       https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
 
-# Update the package index and install ESP32 boards
+# Update the package index and install ESP32 and STM32 boards
 RUN arduino-cli core update-index \
-    && arduino-cli core install esp32:esp32
+    && arduino-cli core install esp32:esp32 \
+    && arduino-cli core install STMicroelectronics:stm32
 
 ENV DISPLAY :1.0
+
+RUN mkdir -p /home/developer/.arduino15 \
+    && chown -R developer:developer /home/developer/.arduino15
 
 USER developer
