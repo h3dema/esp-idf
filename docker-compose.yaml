@@ -24,6 +24,10 @@ services:
     image: esp-idf-dev
     volumes:
       - ${PROJECT_PATH:-./project}:/project
+      - /dev:/dev
+    device_cgroup_rules:
+      - 'c 166:* rmw'   # 166 is the character device major number for /dev/ttyACM*
+      - 'c 188:* rmw'   # 188 is the character device major number for /dev/ttyUSB*
     working_dir: /project
     stdin_open: true
     tty: true
@@ -40,13 +44,12 @@ services:
     image: esp-idf-flash
     volumes:
       - ./project:/project
+      - /dev:/dev
+    privileged: true
     working_dir: /project
     environment:
       - IDF_TOOLS_PATH=/opt/esp/tools
       - ESPPORT=/dev/ttyUSB0
-    devices:
-      - /dev/ttyUSB0:/dev/ttyUSB0
-      - /dev/ttyACM0:/dev/ttyACM0
     stdin_open: true
     tty: true
     command: idf.py -p /dev/ttyUSB0 flash
@@ -66,6 +69,8 @@ services:
       - ${PWD}/Arduino:/home/developer/Arduino/projects
     command: "arduino-ide"
     privileged: true
+    devices:
+      - /dev/ttyACM0:/dev/ttyACM0
 
 volumes:
   esp-tools:

@@ -1,5 +1,5 @@
 # Makefile
-.PHONY: build menuconfig flash clean monitor dev shell
+.PHONY: build menuconfig flash clean monitor dev shell arduino
 
 build:
 	docker-compose run --rm esp-idf idf.py build
@@ -24,3 +24,6 @@ dev:
 
 shell:
 	docker-compose exec esp-idf bash
+
+arduino:
+	docker-compose run --rm esp-idf-arduino
