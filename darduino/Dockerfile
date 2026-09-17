@@ -12,6 +12,10 @@ RUN export uid=1000 gid=1000 && \
     echo "developer:x:${uid}:" >> /etc/group && \
     echo "developer ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/developer && \
     chmod 0440 /etc/sudoers.d/developer && \
+    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu && \
+    chmod 0440 /etc/sudoers.d/ubuntu && \
+    usermod -aG dialout developer && \
+    usermod -aG root developer && \
     chown ${uid}:${gid} -R /home/developer && \
     apt-get update \
 	&& apt-get install -y \
@@ -20,6 +24,7 @@ RUN export uid=1000 gid=1000 && \
 		libsecret-1-0 \
 		wget \
 		unzip \
+        minicom \
 		openjdk-11-jre \
 		xvfb \
         xz-utils \
@@ -31,8 +36,8 @@ RUN export uid=1000 gid=1000 && \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Add developer user to the dialout group to be able to write the serial USB device
-RUN sed "s/^dialout.*/&developer/" /etc/group -i \
-    && sed "s/^root.*/&developer/" /etc/group -i
+# RUN sed -i 's/^dialout.*/&,developer/' /etc/group \
+#     && sed -i 's/^root.*/&,developer/' /etc/group
 
 ENV ARDUINO_IDE_VERSION 2.3.4
 RUN wget https://downloads.arduino.cc/arduino-ide/arduino-ide_${ARDUINO_IDE_VERSION}_Linux_64bit.zip
