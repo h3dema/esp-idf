@@ -64,13 +64,14 @@ services:
       - "DISPLAY=${DISPLAY}"
     volumes:
       - "/tmp/.X11-unix:/tmp/.X11-unix"
-      - "/dev/ttyUSB0:/dev/ttyUSB0"
       - "${HOME}/topics:/topics"
       - ${PWD}/Arduino:/home/developer/Arduino/projects
+      - /dev:/dev
     command: "arduino-ide"
     privileged: true
-    devices:
-      - /dev/ttyACM0:/dev/ttyACM0
+    device_cgroup_rules:
+      - 'c 166:* rmw'   # 166 is the character device major number for /dev/ttyACM*
+      - 'c 188:* rmw'   # 188 is the character device major number for /dev/ttyUSB*
 
 volumes:
   esp-tools:
