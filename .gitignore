@@ -2,6 +2,15 @@
 project/
 Arduino/
 
+# docs
+*.pdf
+*.doc[x]
+
+# compressed
+*.zip
+*.tar
+*.gz
+
 # Prerequisites
 *.d
 
