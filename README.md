@@ -58,28 +58,4 @@ Or you can create it manually.
 
 ## Extra commands
 
-```bash
-# Build
-docker-compose run --rm esp-idf idf.py build
-
-# Interactive shell
-docker-compose run --rm esp-idf bash
-
-# Flash firmware (with USB access)
-docker-compose run --rm esp-idf idf.py -p /dev/ttyUSB0 flash
-
-# Monitor serial output
-docker-compose run --rm esp-idf idf.py -p /dev/ttyUSB0 monitor
-
-# Menuconfig
-docker-compose run --rm esp-idf idf.py menuconfig
-
-# Clean project
-docker-compose run --rm esp-idf idf.py clean
-
-# Full clean
-docker-compose run --rm esp-idf idf.py fullclean
-
-# Set target (e.g., ESP32, ESP32-S3, ESP32-C3)
-docker-compose run --rm esp-idf idf.py set-target esp32s3
-```
+Check with `make help` for more commands.
