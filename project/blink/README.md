@@ -26,6 +26,9 @@ In the `Example Configuration` menu:
 
 * Select the LED type in the `Blink LED type` option.
   * Use `GPIO` for regular LED
+
+> In ESP32-S3, the user led is connected to GPI021
+
   * Use `LED strip` for addressable LED
 * If the LED type is `LED strip`, select the backend peripheral
   * `RMT` is only available for ESP targets with RMT peripheral supported
