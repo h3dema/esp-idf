@@ -1,10 +1,22 @@
 # remove all project files
-project/
+examples/
 Arduino/
+.vscode/
+managed_components/
 
-# docs
+# data
 *.pdf
 *.doc[x]
+*.txt
+*.npy
+
+# extras
+*.old
+*.pyc
+*.keras
+*.pt[h]
+*.espdl
+*.onnx
 
 # compressed
 *.zip
