@@ -3,6 +3,8 @@ examples/
 Arduino/
 .vscode/
 managed_components/
+output/
+build/
 
 # data
 *.pdf
