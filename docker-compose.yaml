@@ -65,7 +65,7 @@ services:
     volumes:
       - "/tmp/.X11-unix:/tmp/.X11-unix"
       - "${HOME}/topics:/topics"
-      - ${PWD}/Arduino:/home/developer/Arduino/projects
+      - ${PWD}/project/Arduino:/home/developer/Arduino/projects
       - /dev:/dev
     command: "arduino-ide"
     privileged: true
