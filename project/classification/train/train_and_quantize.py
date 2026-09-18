@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+"""
+Train, evaluate, export, and quantize a MobileNetV1 classifier for CIFAR-10.
+
+This script:
+    * Trains a MobileNetV1-based image classifier using TensorFlow/Keras.
+    * Exports the trained model to ONNX format.
+    * Validates and evaluates the exported ONNX model.
+    * Generates a calibration dataset for post-training quantization.
+    * Quantizes the model using ESP-DL and exports the resulting ESP-DL artifact.
+    * Compares FP32 and quantized model accuracy and generates a report.
+
+Target platform:
+    ESP32-S3 using the ESP-DL quantization toolchain.
+
+Author: Henrique Duarte Moura
+"""
 import json
 import argparse
 import logging
@@ -18,6 +34,8 @@ from tensorflow.keras import callbacks
 from tensorflow.keras import applications
 
 from esp_ppq.api import espdl_quantize_onnx
+from ppq.api import export_ppq_graph
+from ppq import TargetPlatform
 
 from data import (
     load_data,
@@ -44,36 +62,33 @@ CIFAR10_CLASSES = [
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train MobileNetV1 and export ESP-DL model")
+    parser = argparse.ArgumentParser(description="Train MobileNetV1 and export ESP-DL model", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--learning-rate", type=float, default=1e-4)
-    parser.add_argument("--validation-split", type=float, default=0.1)
-    parser.add_argument("--dropout", type=float, default=0.2)
+    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
+    parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
+    parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--validation-split", type=float, default=0.1, help="Validation split ratio")
+    parser.add_argument("--dropout", type=float, default=0.2, help="Dropout rate")
 
-    parser.add_argument("--patience-es", type=int, default=5)
-    parser.add_argument("--patience-lr", type=int, default=3)
-    parser.add_argument("--lr-factor", type=float, default=0.5)
+    parser.add_argument("--patience-es", type=int, default=5, help="Early stopping patience")
+    parser.add_argument("--patience-lr", type=int, default=3, help="ReduceLROnPlateau patience")
+    parser.add_argument("--lr-factor", type=float, default=0.5, help="ReduceLROnPlateau factor")
 
-    parser.add_argument("--image-size", type=int, default=224)
-    parser.add_argument("--calibration-samples", type=int, default=256)
+    parser.add_argument("--image-size", type=int, default=224, help="Image size")
+    parser.add_argument("--calibration-samples", type=int, default=256, help="Number of calibration samples")
 
-    parser.add_argument("--alpha", type=float, default=0.25)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--alpha", type=float, default=0.25, help="Alpha parameter for MobileNetV1")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
-    parser.add_argument("--onnx-path", default="model.onnx")
-    parser.add_argument("--keras-path", default="best_model.keras")
-    parser.add_argument("--espdl-path", default="model.espdl")
-    parser.add_argument("--calibration-path", default="calibration_data.npy")
+    parser.add_argument("--output-dir", type=Path, default=Path("output").resolve(), help="Output directory")
+    parser.add_argument("--onnx-path", default="model.onnx", help="ONNX model name. Will be stored in --output-dir")
+    parser.add_argument("--keras-path", default="best_model.keras", help="Keras model name. Will be stored in --output-dir")
+    parser.add_argument("--report-path", default="quantization_report.json", help="Quantization report name. Will be stored in --output-dir")
+    parser.add_argument("--calibration-dir", default=Path("calibration").resolve(), help="Calibration dataset directory")
+    parser.add_argument("--espdl-path", default="model.espdl", help="ESP-DL model name. Will be stored in --output-dir/esp/")
 
-    parser.add_argument("--target-chip", default="esp32s3")
-    parser.add_argument("--quantization", choices=["int8", "int16"], default="int8")
-
-    parser.add_argument("--output-dir", type=Path, default=Path("output"))
-
-    parser.add_argument("--report-path", default="quantization_report.json")
-    parser.add_argument("--calibration-dir", default="calibration")
+    parser.add_argument("--target-chip", default="esp32s3", choices=["esp32", "esp32s3", "esp32c3"], help="Target chip")
+    parser.add_argument("--quantization", choices=["int8", "int16"], default="int8", help="Quantization type")
 
     return parser.parse_args()
 
@@ -91,7 +106,7 @@ def set_seed(seed):
     tf.random.set_seed(seed)
 
 
-def build_model(args):
+def build_model(args, num_classes=10):
     augmentation = build_augmentation()
 
     inputs = layers.Input(shape=(args.image_size, args.image_size, 3))
@@ -112,7 +127,7 @@ def build_model(args):
     x = layers.Dropout(args.dropout)(x)
 
     outputs = layers.Dense(
-        10,
+        num_classes,
         activation="softmax",
         name="predictions"
     )(x)
@@ -223,6 +238,15 @@ def save_quantization_report(
 
 
 def run_espdl_quantizer(args):
+    """
+    Run ESP-DL quantizer on FP32 ONNX model
+    Saves the quantized model to ESP-DL format (.espdl) and ONNX format (.onnx)
+
+    Args:
+        args: command line arguments
+    Returns:
+        quantized_onnx_path : path to quantized ONNX model
+    """
     logging.info("Running ESP-DL quantization")
 
     calibration_dataloader = create_calibration_dataloader(args.calibration_dir)
@@ -231,7 +255,7 @@ def run_espdl_quantizer(args):
         "int16": "w16a16",
     }[args.quantization]
 
-    espdl_quantize_onnx(
+    quant_ppq_graph =espdl_quantize_onnx(
         onnx_import_file=str(args.onnx_path),
         espdl_export_file=str(args.espdl_path),
         calib_dataloader=calibration_dataloader,
@@ -240,7 +264,19 @@ def run_espdl_quantizer(args):
         target=args.target_chip,
         quant_type=quant_type,
     )
-    logging.info("Quantized model saved to %s", args.espdl_path)
+
+    # Manually export the quantized graph to ONNX format
+    # target_platform depends on whether you want QDQ format (e.g., TargetPlatform.ONNX)
+    quantized_onnx_path = args.espdl_path.parent / "quantized.onnx"
+    export_ppq_graph(
+        graph=quant_ppq_graph,
+        platform=TargetPlatform.ONNX,
+        graph_save_to=str(quantized_onnx_path),
+        config_save_to=str(quantized_onnx_path.with_suffix(".json")),
+    )
+    logging.info("Quantized model saved to %s", quantized_onnx_path)
+
+    return quantized_onnx_path
 
 
 def save_labels(path: Path):
@@ -270,7 +306,6 @@ def main():
     args.espdl_path = args.output_dir / "esp" /args.espdl_path
     args.keras_path = args.output_dir / args.keras_path
     args.onnx_path = args.output_dir / args.onnx_path
-    args.calibration_path = args.output_dir / args.calibration_path
     args.report_path = args.output_dir / args.report_path
 
     # create output directory
@@ -286,43 +321,43 @@ def main():
     logging.info("Building model")
     model, base_model = build_model(args)
 
-    # logging.info("Training classifier head")
-    # train_model(
-    #     model,
-    #     train_ds,
-    #     val_ds,
-    #     args,
-    # )
+    logging.info("Training classifier head")
+    train_model(
+        model,
+        train_ds,
+        val_ds,
+        args,
+    )
 
-    # logging.info("Loading best checkpoint")
-    # model = tf.keras.models.load_model(args.keras_path)
+    logging.info("Loading best checkpoint")
+    model = tf.keras.models.load_model(args.keras_path)
 
-    # logging.info("Fine tuning")
-    # model = fine_tune(
-    #     model,
-    #     base_model,
-    #     train_ds,
-    #     val_ds,
-    # )
+    logging.info("Fine tuning")
+    model = fine_tune(
+        model,
+        base_model,
+        train_ds,
+        val_ds,
+    )
 
-    # logging.info("Evaluating TensorFlow model")
-    # keras_loss, keras_acc = evaluate_model(
-    #     model,
-    #     test_ds,
-    # )
+    logging.info("Evaluating TensorFlow model")
+    keras_loss, keras_acc = evaluate_model(
+        model,
+        test_ds,
+    )
 
-    # logging.info("Exporting ONNX")
-    # export_onnx(
-    #     model,
-    #     args.onnx_path,
-    #     args.image_size,
-    # )
+    logging.info("Exporting ONNX")
+    export_onnx(
+        model,
+        args.onnx_path,
+        args.image_size,
+    )
 
-    # logging.info("Validating ONNX")
-    # validate_onnx_model(
-    #     keras_model=model,
-    #     onnx_path=args.onnx_path,
-    # )
+    logging.info("Validating ONNX")
+    validate_onnx_model(
+        keras_model=model,
+        onnx_path=args.onnx_path,
+    )
 
     logging.info("Evaluating ONNX model")
     onnx_acc = evaluate_onnx_model(
@@ -343,24 +378,26 @@ def main():
     verify_outputs(args)
 
     logging.info("Running ESP-DL quantizer")
-    run_espdl_quantizer(args)
+    quantized_onnx_path = run_espdl_quantizer(args)
     if not os.path.exists(args.espdl_path):
         raise RuntimeError(f"ESP-DL model not generated: {args.espdl_path}")
 
     logging.info("ESP-DL model generated: %s", args.espdl_path)
 
     logging.info("Evaluating quantized model")
+    test_ds_quant = test_ds.unbatch().batch(1)  # the quantized model expects batch size 1
     quant_acc = evaluate_onnx_model(
-        onnx_path=args.espdl_path.with_suffix(".onnx"),
-        test_ds=test_ds,
+        onnx_path=quantized_onnx_path,
+        test_ds=test_ds_quant,
     )
-    keras_acc = 0.72  # TODO: remove me!!!!
+    keras_acc = 0.69 # TODO: remove me!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     compare_accuracies(
         keras_acc=keras_acc,
         onnx_acc=onnx_acc,
         quant_acc=quant_acc,
     )
 
+    logging.info("Saving quantization report")
     save_quantization_report(
         keras_acc=keras_acc,
         onnx_acc=onnx_acc,

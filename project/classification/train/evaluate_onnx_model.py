@@ -10,6 +10,7 @@ def evaluate_onnx_model(onnx_path, test_ds):
     correct = 0
     total = 0
     for images, labels in test_ds:
+        print(images.dtype, labels.dtype)
         predictions = session.run(None, {input_name: images.numpy()})[0]
         pred_classes = np.argmax(predictions, axis=1)
         labels = labels.numpy().flatten()
