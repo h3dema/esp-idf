@@ -9,6 +9,9 @@ managed_components/
 *.doc[x]
 *.txt
 *.npy
+*.jpeg
+*.jpg
+*.png
 
 # extras
 *.old
