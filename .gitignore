@@ -6,6 +6,8 @@ managed_components/
 output/
 build/
 
+*.lock
+
 # data
 *.pdf
 *.doc[x]
