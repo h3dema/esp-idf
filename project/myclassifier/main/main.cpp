@@ -8,7 +8,7 @@
 static const char *TAG = "MAIN";
 
 #define MODEL_PATH  MOUNT_POINT"/models/my_model.espdl"
-#define IMAGE_PATH  MOUNT_POINT"/test_image.jpg"
+#define IMAGE_PATH  MOUNT_POINT"/images/0011_class3.jpg"
 
 extern "C" void app_main(void)
 {
