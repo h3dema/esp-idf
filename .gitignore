@@ -16,6 +16,7 @@ build/
 *.jpeg
 *.jpg
 *.png
+*.bmp
 
 # extras
 *.old
