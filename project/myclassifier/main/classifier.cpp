@@ -73,8 +73,10 @@ void classify_image(dl::Model *model,
      * allocated by ESP-DL. We therefore create a temporary TensorBase
      * containing the RGB888 image and assign it to the model input.
      *
-     * For an RGB image, the temporary tensor is represented as:
+     * ESP‑DL 3.3.x models exported from ESP‑DL tools (and most ESP‑DL examples)
+     * use NHWC layout.
      *
+     * For an RGB image, the temporary tensor is represented as:
      *   [1, 3, height, width]
      *
      * with RGB data in CHW order.
@@ -87,9 +89,9 @@ void classify_image(dl::Model *model,
         return;
     }
 
-    const int channels = input->shape[1];
-    const int input_height = input->shape[2];
-    const int input_width = input->shape[3];
+    const int input_height = input->shape[1];
+    const int input_width  = input->shape[2];
+    const int channels     = input->shape[3];
 
     if (channels != 3) {
         ESP_LOGE(TAG,
@@ -126,15 +128,10 @@ void classify_image(dl::Model *model,
      * input shape [1, 3, H, W].
      */
     std::vector<float> tensor_data(element_count);
-
-    float *red   = tensor_data.data();
-    float *green = red + pixel_count;
-    float *blue  = green + pixel_count;
-
     for (size_t i = 0; i < pixel_count; ++i) {
-        red[i]   = static_cast<float>(img_data[i * 3 + 0]);
-        green[i] = static_cast<float>(img_data[i * 3 + 1]);
-        blue[i]  = static_cast<float>(img_data[i * 3 + 2]);
+        tensor_data[i * 3 + 0] = img_data[i * 3 + 0]; // R
+        tensor_data[i * 3 + 1] = img_data[i * 3 + 1]; // G
+        tensor_data[i * 3 + 2] = img_data[i * 3 + 2]; // B
     }
 
     /*
@@ -144,7 +141,7 @@ void classify_image(dl::Model *model,
      * important for quantized ESP-DL models.
      */
     dl::TensorBase image_tensor(
-        {1, 3, static_cast<int>(height), static_cast<int>(width)},
+        {1, input_height, input_width, 3},   // NHWC
         tensor_data.data(),
         0,
         dl::DATA_TYPE_FLOAT,
