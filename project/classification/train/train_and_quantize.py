@@ -106,7 +106,7 @@ def set_seed(seed):
     tf.random.set_seed(seed)
 
 
-def build_model(args, num_classes=10):
+def build_model(args, num_classes=len(CIFAR10_CLASSES)):
     augmentation = build_augmentation()
 
     inputs = layers.Input(shape=(args.image_size, args.image_size, 3))
@@ -129,7 +129,7 @@ def build_model(args, num_classes=10):
     outputs = layers.Dense(
         num_classes,
         activation="softmax",
-        name="predictions"
+        name="predictions",  # this is the name of the output layer that will be used by the ESP-DL model
     )(x)
 
     model = models.Model(inputs, outputs)
@@ -255,12 +255,13 @@ def run_espdl_quantizer(args):
         "int16": "w16a16",
     }[args.quantization]
 
+    # notice the image shape. only one per batch
     quant_ppq_graph =espdl_quantize_onnx(
         onnx_import_file=str(args.onnx_path),
         espdl_export_file=str(args.espdl_path),
         calib_dataloader=calibration_dataloader,
         calib_steps=len(calibration_dataloader),
-        input_shape=[1, args.image_size, args.image_size, 3],
+        input_shape=[1, args.image_size, args.image_size, 3],  # [1, imgsz, imgsz, 3]
         target=args.target_chip,
         quant_type=quant_type,
     )
@@ -390,7 +391,7 @@ def main():
         onnx_path=quantized_onnx_path,
         test_ds=test_ds_quant,
     )
-    keras_acc = 0.69 # TODO: remove me!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
     compare_accuracies(
         keras_acc=keras_acc,
         onnx_acc=onnx_acc,
