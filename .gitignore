@@ -5,6 +5,7 @@ Arduino/
 managed_components/
 output/
 build/
+esp-dl*/
 
 *.lock
 
