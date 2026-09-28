@@ -1,4 +1,5 @@
 #include "classifier.h"
+#include "int8_classification_postprocessor.h"
 
 #include <vector>
 
@@ -7,25 +8,13 @@
 #include "dl_cls_postprocessor.hpp"
 
 static const char *TAG = "CLASSIFIER";
+static const char *OUTPUT_LAYER = "predictions";
 
 // ---------- Custom 10-class postprocessor ----------
-class My10ClassPostprocessor : public dl::cls::ClsPostprocessor {
-public:
-    My10ClassPostprocessor(dl::Model *model,
-                           int topk = 1,
-                           float score_thr = 0.0f,
-                           bool need_softmax = true)
-        : ClsPostprocessor(model, topk, score_thr, need_softmax, "output") {
-        m_cat_names = my_class_names;
-    }
-
-private:
-    static const char *my_class_names[10];
-};
-
-const char *My10ClassPostprocessor::my_class_names[10] = {
-    "class_0", "class_1", "class_2", "class_3", "class_4",
-    "class_5", "class_6", "class_7", "class_8", "class_9"
+const uint32_t NUM_CLASSES = 10;
+const char *my_class_names[NUM_CLASSES] = {
+    "airplane", "automobile", "bird", "cat", "deer",
+    "dog", "frog", "horse", "ship", "truck"
 };
 
 // ---------- Public API ----------
@@ -47,26 +36,23 @@ void classify_image(dl::Model *model,
                     uint16_t height,
                     const char *filename)
 {
-    if (model == nullptr || img_data == nullptr) {
+    if (!model || !img_data) {
         ESP_LOGE(TAG, "Invalid model or image data");
         return;
     }
 
-    // Get the model input using the ESP-DL 3.3.x API.
     dl::TensorBase *input = model->get_input();
-    if (input == nullptr) {
+    if (!input) {
         ESP_LOGE(TAG, "Model has no input tensor");
         return;
     }
 
-    ESP_LOGI(TAG,
-             "Input tensor: shape=[%d,%d,%d,%d], dtype=%d, size=%d",
-             input->shape.size() > 0 ? input->shape[0] : -1,
-             input->shape.size() > 1 ? input->shape[1] : -1,
-             input->shape.size() > 2 ? input->shape[2] : -1,
-             input->shape.size() > 3 ? input->shape[3] : -1,
-             input->dtype,
-             input->size);
+    // Model input is NHWC: [1, H, W, C]
+    if (input->shape.size() != 4) {
+        ESP_LOGE(TAG, "Expected 4D NHWC input, got %d dims",
+                 (int)input->shape.size());
+        return;
+    }
 
     /*
      * The model input tensor already has its shape, dtype and memory
@@ -81,109 +67,104 @@ void classify_image(dl::Model *model,
      *
      * with RGB data in CHW order.
      */
-
-    if (input->shape.size() != 4) {
-        ESP_LOGE(TAG,
-                 "Unsupported input shape. Expected 4 dimensions, got %d",
-                 static_cast<int>(input->shape.size()));
-        return;
-    }
-
+    const int batch        = input->shape[0];
     const int input_height = input->shape[1];
     const int input_width  = input->shape[2];
     const int channels     = input->shape[3];
 
+    ESP_LOGI(TAG,
+             "Input tensor: shape=[%d,%d,%d,%d], dtype=%d, size=%d",
+             batch, input_height, input_width, channels,
+             input->dtype, input->size);
+
+    if (batch != 1) {
+        ESP_LOGE(TAG, "Only batch=1 supported, got %d", batch);
+        return;
+    }
     if (channels != 3) {
-        ESP_LOGE(TAG,
-                 "Unsupported number of input channels: %d. Expected 3",
-                 channels);
+        ESP_LOGE(TAG, "Model expects 3 channels, got %d", channels);
         return;
     }
 
     if (width != input_width || height != input_height) {
         ESP_LOGE(TAG,
                  "Image size %ux%u does not match model input %dx%d",
-                 width,
-                 height,
-                 input_width,
-                 input_height);
+                 width, height, input_width, input_height);
         return;
     }
 
-    const size_t pixel_count =
-        static_cast<size_t>(width) * static_cast<size_t>(height);
-
+    const size_t pixel_count = (size_t)width * (size_t)height;
     const size_t element_count = pixel_count * 3;
 
-    /*
-     * Convert RGB888 HWC:
-     *
-     *   RGB RGB RGB ...
-     *
-     * into CHW:
-     *
-     *   RRRR... GGGG... BBBB...
-     *
-     * This is the layout normally expected by ESP-DL models with
-     * input shape [1, 3, H, W].
-     */
-    std::vector<float> tensor_data(element_count);
-    for (size_t i = 0; i < pixel_count; ++i) {
-        tensor_data[i * 3 + 0] = img_data[i * 3 + 0]; // R
-        tensor_data[i * 3 + 1] = img_data[i * 3 + 1]; // G
-        tensor_data[i * 3 + 2] = img_data[i * 3 + 2]; // B
-    }
+    // --- Handle dtype ---
+    dl::dtype_t dtype = input->dtype;
 
-    /*
-     * Create a temporary TensorBase using the model's input dtype.
-     *
-     * The exponent is taken from the existing model input. This is
-     * important for quantized ESP-DL models.
-     */
-    dl::TensorBase image_tensor(
-        {1, input_height, input_width, 3},   // NHWC
-        tensor_data.data(),
-        0,
-        dl::DATA_TYPE_FLOAT,
-        true
-    );
-
-    if (image_tensor.data == nullptr) {
-        ESP_LOGE(TAG, "Failed to create image tensor");
+    if (!input->data) {
+        ESP_LOGE(TAG, "Input tensor has null data pointer");
         return;
     }
 
-    if (!input->assign(&image_tensor)) {
-        ESP_LOGE(TAG, "Failed to assign image tensor to model input");
+    // --- Fill the existing buffer in HWC order ---
+    if (dtype == dl::DATA_TYPE_INT8) {
+        int8_t *buf = static_cast<int8_t *>(input->data);
+
+        if (input->size < (int)element_count) {
+            ESP_LOGE(TAG,
+                     "Input buffer too small: size=%d, needed=%d",
+                     input->size, (int)element_count);
+            return;
+        }
+
+        for (size_t i = 0; i < pixel_count; ++i) {
+            uint8_t r = img_data[i * 3 + 0];
+            uint8_t g = img_data[i * 3 + 1];
+            uint8_t b = img_data[i * 3 + 2];
+
+            buf[i * 3 + 0] = (int8_t)((int)r - 128);
+            buf[i * 3 + 1] = (int8_t)((int)g - 128);
+            buf[i * 3 + 2] = (int8_t)((int)b - 128);
+        }
+
+    } else if (dtype == dl::DATA_TYPE_FLOAT) {
+        float *buf = static_cast<float *>(input->data);
+
+        if (input->size < (int)element_count) {
+            ESP_LOGE(TAG,
+                     "Input buffer too small: size=%d, needed=%d",
+                     input->size, (int)element_count);
+            return;
+        }
+
+        for (size_t i = 0; i < pixel_count; ++i) {
+            buf[i * 3 + 0] = (float)img_data[i * 3 + 0];
+            buf[i * 3 + 1] = (float)img_data[i * 3 + 1];
+            buf[i * 3 + 2] = (float)img_data[i * 3 + 2];
+        }
+
+    } else {
+        ESP_LOGE(TAG, "Unsupported input dtype=%d", (int)dtype);
         return;
     }
 
     ESP_LOGI(TAG, "Running inference for %s", filename);
+    model->run();  // outputs INT8 logits
+    auto out = model->get_output(OUTPUT_LAYER);
+    if (out) {
+        ESP_LOGI(TAG, "Output dtype=%d, size=%d", out->dtype, out->size);
+        Int8ClassificationPostprocessor pp(out, my_class_names, 10);
 
-    model->run();
+        ESP_LOGI(TAG, "Predicted class %d: %s (logit=%d)",
+            pp.get_class_index(),
+            pp.get_label(),
+            pp.get_logit()
+        );
 
-    /*
-     * Post-process the model output.
-     */
-    My10ClassPostprocessor postprocessor(
-        model,
-        1,       // top-k
-        0.0f,    // score threshold
-        true     // apply softmax
-    );
+        // Optional: print all logits
+        for (int i = 0; i < 10; i++) {
+            ESP_LOGI(TAG, "logit[%d] = %d", i, pp.get_all_logits()[i]);
+        }
 
-    std::vector<dl::cls::result_t> &results =
-        postprocessor.postprocess();
-
-    if (!results.empty()) {
-        ESP_LOGI(TAG,
-                 "File: %s -> Predicted class: %s (score: %.4f)",
-                 filename,
-                 results[0].cat_name,
-                 results[0].score);
     } else {
-        ESP_LOGI(TAG,
-                 "File: %s -> No prediction",
-                 filename);
+        ESP_LOGI(TAG, "File: %s -> No prediction", filename);
     }
 }
