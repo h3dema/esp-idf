@@ -15,10 +15,11 @@ Target platform:
 
 Author: Henrique Duarte Moura
 """
+import os
+os.environ["TF_ENABLE_ONEDNN_OPTS"]="0"  # turn off oneDNN custom operations
 import json
 import argparse
 import logging
-import os
 import random
 import subprocess
 from pathlib import Path
@@ -77,7 +78,7 @@ def parse_args():
     parser.add_argument("--image-size", type=int, default=224, help="Image size")
     parser.add_argument("--calibration-samples", type=int, default=256, help="Number of calibration samples")
 
-    parser.add_argument("--alpha", type=float, default=0.25, help="Alpha parameter for MobileNetV1")
+    parser.add_argument("--alpha", type=float, default=0.50, help="Alpha parameter for MobileNetV1")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     parser.add_argument("--output-dir", type=Path, default=Path("output").resolve(), help="Output directory")

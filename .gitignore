@@ -6,6 +6,7 @@ managed_components/
 output/
 build/
 esp-dl*/
+classification/train/calibration/*
 
 *.lock
 
