@@ -3,12 +3,15 @@ examples/
 Arduino/
 .vscode/
 managed_components/
-output/
+output*/
 build/
 esp-dl*/
-classification/train/calibration/*
+calibration/
 
 *.lock
+
+# configuration
+sdkconfig.ci
 
 # data
 *.pdf
