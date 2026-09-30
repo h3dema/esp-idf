@@ -1,5 +1,9 @@
-# Folder structure
+# Test of a simple classification model on CIFAR-10
 
+This ESP code uses the model trained in `project/classification/train`.
+You must copy the trained model to the sdcard as shown below.
+
+# Folder structure for the ESP code 
 
 ```text
 myclassifier/
@@ -23,4 +27,14 @@ Features:           Wi-Fi, BT 5 (LE), Dual Core + LP Core, 240MHz, Embedded PSRA
 Crystal frequency:  40MHz
 USB mode:           USB-Serial/JTAG
 MAC:                10:b4:1d:e9:fc:30
+```
+
+## Storage
+
+```text
+sdcard
+├── images
+│   └── 
+├── models
+│   └── model.espdl
 ```
