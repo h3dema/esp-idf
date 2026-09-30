@@ -1,6 +1,7 @@
 from pathlib import Path
 import numpy as np
 
+import keras
 import tensorflow as tf
 
 from gen_espdl import parse_args, load_data
@@ -32,12 +33,12 @@ def representative_data_gen(train_ds, num_samples=100):
 
 
 if __name__ == "__main__":
-    print("Running test.py")
+    print("Running conversion from keras to tflite")
     # import pdb; pdb.set_trace()
     args = parse_args()
 
     # Load the keras model
-    model_path = Path(__file__).parent / "output/best_model.keras"
+    model_path = Path(__file__).parent / "output/model.keras"
 
     print("Loading datasets")
     train_ds, val_ds, test_ds, training_images = load_data(args)

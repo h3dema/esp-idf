@@ -163,7 +163,7 @@ def train_model(model, train_ds, val_ds, args):
             verbose=1
         ),
         callbacks.ModelCheckpoint(
-            filepath=args.keras_path,
+            filepath=str(args.keras_path),
             monitor="val_accuracy",
             save_best_only=True,
             mode="max",
@@ -374,7 +374,7 @@ def main():
     )
 
     logging.info("Loading best checkpoint")
-    model = tf.keras.models.load_model(args.keras_path)
+    model = tf.keras.models.load_model(str(args.keras_path))
 
     logging.info("Fine tuning")
     model = fine_tune(
@@ -399,7 +399,7 @@ def main():
         args.image_size,
     )
     keras_path = args.onnx_path.with_suffix(".keras")
-    model.save(keras_path)
+    model.save(str(keras_path))
     logging.info("Keras model saved to %s", keras_path)
 
     logging.info("Validating ONNX")
