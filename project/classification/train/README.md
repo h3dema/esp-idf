@@ -31,7 +31,7 @@ pip install -r requirements.txt
 The pipeline can be run using the following command:
 
 ```bash
-python train_and_quantize.py \
+python gen_espdl.py \
     --epochs 30 \
     --batch-size 32 \
     --image-size 224 \

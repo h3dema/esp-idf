@@ -13,6 +13,9 @@ This script:
 Target platform:
     ESP32-S3 using the ESP-DL quantization toolchain.
 
+Known issues:
+    The ESPDL model does not accept multiple inputs, e.g., y = model(x1, x2).
+
 Author: Henrique Duarte Moura
 """
 import os
@@ -66,6 +69,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train MobileNetV1 and export ESP-DL model", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
+    parser.add_argument("--tune-epochs", type=int, default=5, help="Number of fine tunning epochs")
+
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--validation-split", type=float, default=0.1, help="Validation split ratio")
@@ -205,6 +210,41 @@ def export_onnx(model, output_path, image_size):
     logging.info("ONNX exported to %s", output_path)
 
 
+def representative_data_gen(train_ds, num_samples=100):
+    """
+    Build a TFLite representative dataset generator from a tf.data.Dataset.
+
+    Args:
+        train_ds: your original training dataset (tf.data.Dataset)
+        num_samples: maximum number of samples to yield
+
+    Yields:
+        A list containing a single float32 input tensor.
+    """
+    count = 0
+
+    for batch in train_ds:
+        # If your dataset yields (images, labels)
+        if isinstance(batch, (tuple, list)):
+            inputs = batch[0]
+        else:
+            inputs = batch
+
+        # Iterate through individual samples inside the batch
+        for sample in inputs:
+            # Convert to float32 (required by TFLite)
+            sample = tf.cast(sample, tf.float32)
+
+            # Add batch dimension if missing
+            if len(sample.shape) == len(inputs.shape) - 1:
+                sample = tf.expand_dims(sample, axis=0)
+
+            yield [sample]
+
+            count += 1
+            if count >= num_samples:
+                return
+
 def compare_accuracies(keras_acc, onnx_acc, quant_acc):
     logging.info("FP32 Keras     : %.4f", keras_acc)
     logging.info("FP32 ONNX      : %.4f", onnx_acc)
@@ -225,6 +265,7 @@ def save_quantization_report(
     quant_acc,
     calibration_samples,
     output_file,
+    width_multiplier,
 ):
     report = {
         "keras_accuracy": float(keras_acc),
@@ -232,7 +273,7 @@ def save_quantization_report(
         "quantized_accuracy": float(quant_acc),
         "accuracy_drop": float(keras_acc - quant_acc),
         "calibration_samples": calibration_samples,
-        "model": "mobilenetv1_alpha0.25",
+        "model": f"mobilenetv1_alpha{width_multiplier:.2f}",
     }
     with open(output_file, "w") as fp:
         json.dump(report, fp, indent=4)
@@ -250,7 +291,7 @@ def run_espdl_quantizer(args):
     """
     logging.info("Running ESP-DL quantization")
 
-    calibration_dataloader = create_calibration_dataloader(args.calibration_dir)
+    calibration_dataloader = create_calibration_dataloader(args.calibration_dir, batch_size=1)
     quant_type = {
         "int8": "w8a8",
         "int16": "w16a16",
@@ -269,6 +310,7 @@ def run_espdl_quantizer(args):
 
     # Manually export the quantized graph to ONNX format
     # target_platform depends on whether you want QDQ format (e.g., TargetPlatform.ONNX)
+    # BUG: it looks like quantized.onnx is FP32
     quantized_onnx_path = args.espdl_path.parent / "quantized.onnx"
     export_ppq_graph(
         graph=quant_ppq_graph,
@@ -340,8 +382,10 @@ def main():
         base_model,
         train_ds,
         val_ds,
+        epochs=args.tune_epochs,
     )
 
+    # model is save to args.keras_path
     logging.info("Evaluating TensorFlow model")
     keras_loss, keras_acc = evaluate_model(
         model,
@@ -354,6 +398,9 @@ def main():
         args.onnx_path,
         args.image_size,
     )
+    keras_path = args.onnx_path.with_suffix(".keras")
+    model.save(keras_path)
+    logging.info("Keras model saved to %s", keras_path)
 
     logging.info("Validating ONNX")
     validate_onnx_model(
@@ -406,9 +453,19 @@ def main():
         quant_acc=quant_acc,
         calibration_samples=args.calibration_samples,
         output_file=args.report_path,
+        width_multiplier=args.alpha,
     )
 
     logging.info("Pipeline completed successfully")
+
+
+    # convert ONNX --> TFLITE
+    logging.info("Converting ONNX to TFLITE")
+    tflite_path = convert_onnx_to_tflite(
+        onnx_path=quantized_onnx_path,
+        tflite_path=args.onnx_path.with_suffix(".tflite"),
+        train_ds=train_ds,
+    )
 
 
 if __name__ == "__main__":
