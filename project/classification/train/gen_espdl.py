@@ -459,14 +459,5 @@ def main():
     logging.info("Pipeline completed successfully")
 
 
-    # convert ONNX --> TFLITE
-    logging.info("Converting ONNX to TFLITE")
-    tflite_path = convert_onnx_to_tflite(
-        onnx_path=quantized_onnx_path,
-        tflite_path=args.onnx_path.with_suffix(".tflite"),
-        train_ds=train_ds,
-    )
-
-
 if __name__ == "__main__":
     main()
