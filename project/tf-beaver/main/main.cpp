@@ -11,7 +11,6 @@
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/micro/micro_log.h"
-// #include "tensorflow/lite/micro/all_ops_resolver.h"
 
 // ===== MODEL HEADERS =====
 #include "best_triple_i256_m1_int8.h"
