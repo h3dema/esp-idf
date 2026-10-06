@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-
 # Add useful aliases
 RUN echo 'alias ll="ls -alF"' >> ~/.bashrc && \
     echo 'alias build="idf.py build"' >> ~/.bashrc && \
@@ -30,8 +29,13 @@ pip3 install \
     esp-idf-monitor\n' > /pip-extras.sh && \
     chmod +x /pip-extras.sh
 
+# Install Python packages for inspecting .tflite models
+RUN pip3 install flatbuffers tflite tensorflow netron
+
 # DON'T override ENTRYPOINT or CMD unless you know what you're doing
 # The official image's entrypoint sources the environment properly
+
+EXPOSE 8080
 
 # to guarantee that all environmental variables are set
 RUN echo "source /opt/esp/idf/export.sh" >> /etc/bash.bashrc
