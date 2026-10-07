@@ -7,9 +7,9 @@
 #include "freertos/task.h"
 
 // ===== TFLITE MICRO =====
+#include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
-#include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/micro/micro_log.h"
 
 // ===== MODEL HEADERS =====
@@ -21,7 +21,7 @@ static const char *TAG = "TRIPLE_MODEL";
 
 // ===== ARENA SIZE =====
 // Increase if your models need more RAM
-constexpr int kTensorArenaSize = 250 * 1024;
+constexpr int kTensorArenaSize = 3 * 1024 * 1024;
 
 
 void dump_output_tensor(TfLiteTensor *tensor, const char *label)
@@ -81,6 +81,7 @@ void run_model(
     const char *name)
 {
     ESP_LOGI(TAG, "Loading model: %s", name);
+    ESP_LOGI(TAG, "Model size = %u bytes", model_len);
 
     const tflite::Model *model = tflite::GetModel(model_data);
     if (model->version() != TFLITE_SCHEMA_VERSION) {
@@ -90,7 +91,7 @@ void run_model(
     }
 
     // static tflite::AllOpsResolver resolver;
-    tflite::MicroMutableOpResolver<10> resolver;
+    tflite::MicroMutableOpResolver<11> resolver;
     // use `check_tflite.py` to list the ops used in the model and add them here
     resolver.AddAdd();
     resolver.AddConcatenation();
@@ -147,19 +148,29 @@ extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "Starting triple-model test");
 
-   static uint8_t tensor_arena_m1[kTensorArenaSize];
-   run_model(_workspace_weights_best_triple_i256_m1_int8_pth,
-    _workspace_weights_best_triple_i256_m1_int8_pth_len,
-    tensor_arena_m1,
-    "MODEL M1");
+    uint8_t *tensor_arena_m1 =
+        static_cast<uint8_t *>(heap_caps_malloc(
+            kTensorArenaSize,
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    ESP_LOGI(TAG, "Free PSRAM: %u", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
-    // static uint8_t tensor_arena_m2[kTensorArenaSize];
+    if (tensor_arena_m1 == nullptr) {
+        ESP_LOGE(TAG, "Failed to allocate tensor arena for M1");
+        return;
+    }
+    run_model(
+        _workspace_weights_best_triple_i256_m1_int8_pth,
+        _workspace_weights_best_triple_i256_m1_int8_pth_len,
+        tensor_arena_m1,
+        "MODEL M1");
+
+    heap_caps_free(tensor_arena_m1);
+
     // run_model(_workspace_weights_best_triple_i256_m2_int8_pth,
     //           _workspace_weights_best_triple_i256_m2_int8_pth_len,
     //           tensor_arena_m2,
     //           "MODEL M2");
 
-    // static uint8_t tensor_arena_m3[kTensorArenaSize];
     // run_model(_workspace_weights_best_triple_i256_m3_int8_pth,
     //           _workspace_weights_best_triple_i256_m3_int8_pth_len,
     //           tensor_arena_m3,
