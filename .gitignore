@@ -8,6 +8,7 @@ build/
 esp-dl*/
 calibration/
 
+
 *.lock
 *.tflite
 *.keras
@@ -15,6 +16,7 @@ save_model*
 
 # configuration
 sdkconfig.ci
+sdkconfig
 
 # data
 *.pdf
