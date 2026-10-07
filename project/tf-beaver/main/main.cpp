@@ -37,6 +37,7 @@ struct TensorBuffer {
     size_t bytes = 0;
     float scale = 0.0f;
     int zero_point = 0;
+    std::vector<int> dims;
 };
 
 struct ModelResult {
@@ -46,9 +47,7 @@ struct ModelResult {
 };
 
 
-static bool copy_tensor(
-    TfLiteTensor* src,
-    TensorBuffer& dst)
+static bool copy_tensor(TfLiteTensor* src, TensorBuffer& dst)
 {
     if (!src)
         return false;
@@ -56,6 +55,15 @@ static bool copy_tensor(
     dst.bytes = src->bytes;
     dst.scale = src->params.scale;
     dst.zero_point = src->params.zero_point;
+
+    // Copy dimensions
+    dst.dims.clear();
+    if (src->dims) {
+        dst.dims.reserve(src->dims->size);
+        for (int i = 0; i < src->dims->size; ++i) {
+            dst.dims.push_back(src->dims->data[i]);
+        }
+    }
 
     dst.data = static_cast<int8_t*>(
         heap_caps_malloc(
@@ -71,16 +79,31 @@ static bool copy_tensor(
 }
 
 
+static std::string dims_to_string(const TensorBuffer& tensor)
+{
+    std::string shape = "[";
+    for (size_t i = 0; i < tensor.dims.size(); ++i) {
+        shape += std::to_string(tensor.dims[i]);
+        if (i + 1 < tensor.dims.size()) {
+            shape += ", ";
+        }
+    }
+    shape += "]";
+    return shape;
+}
+
+
 void dump_output_tensor(const TensorBuffer& tensor, const char* label)
 {
-    constexpr int kMaxPrint = 8;
+    constexpr int kMaxPrint = 0;
 
     ESP_LOGI(TAG, "===== %s =====", label);
-    ESP_LOGI(TAG,
-             "bytes=%u scale=%f zero_point=%d",
+    ESP_LOGI(TAG, "bytes=%u scale=%f zero_point=%d dims=%s",
              static_cast<unsigned>(tensor.bytes),
              tensor.scale,
-             tensor.zero_point);
+             tensor.zero_point,
+             dims_to_string(tensor).c_str()
+    );
 
     if (tensor.data == nullptr) {
         ESP_LOGW(TAG, "Tensor data is nullptr");
@@ -88,19 +111,12 @@ void dump_output_tensor(const TensorBuffer& tensor, const char* label)
     }
 
     int count = tensor.bytes / sizeof(int8_t);
-
     ESP_LOGI(TAG, "INT8 tensor (%d elements)", count);
-
-    for (int i = 0; i < count && i < kMaxPrint; ++i) {
-        float dequant =
-            (static_cast<int>(tensor.data[i]) - tensor.zero_point) *
-            tensor.scale;
-
-        ESP_LOGI(TAG,
-                 "[%d] raw=%d dequant=%f",
-                 i,
-                 static_cast<int>(tensor.data[i]),
-                 dequant);
+    if (kMaxPrint > 0 && count >= kMaxPrint) {
+        for (int i = 0; i < count && i < kMaxPrint; ++i) {
+            float dequant = (static_cast<int>(tensor.data[i]) - tensor.zero_point) * tensor.scale;
+            ESP_LOGI(TAG, "[%d] raw=%d dequant=%f", i, static_cast<int>(tensor.data[i]), dequant);
+        }
     }
 }
 
@@ -312,6 +328,38 @@ ModelResult run_m3(
 }
 
 
+TensorBuffer logits_to_prediction(
+    const TensorBuffer& logits,
+    float threshold = 0.0f)
+{
+    TensorBuffer pred;
+
+    if (!logits.data) {
+        return pred;
+    }
+
+    pred.bytes = logits.bytes;
+    pred.scale = 1.0f;
+    pred.zero_point = 0;
+
+    pred.dims = logits.dims;
+
+    pred.data = static_cast<int8_t*>(heap_caps_malloc(pred.bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+
+    if (!pred.data) {
+        ESP_LOGE(TAG, "Failed to allocate prediction buffer");
+        return {};
+    }
+
+    const int count = logits.bytes / sizeof(int8_t);
+    for (int i = 0; i < count; ++i) {
+        const float value = (static_cast<int>(logits.data[i]) - logits.zero_point) * logits.scale;
+        pred.data[i] = (value > threshold) ? 1 : 0;
+    }
+
+    return pred;
+}
+
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "Starting triple-model test");
@@ -332,7 +380,7 @@ extern "C" void app_main(void)
         _workspace_weights_best_triple_i256_m1_int8_pth_len,
         tensor_arena
     );
-    dump_output_tensor(r1.logits, "M1 logits1");
+    dump_output_tensor(r1.logits, "M1 logits");
 
     // ---- M2 ----
     ModelResult r2 = run_m2(
@@ -341,7 +389,7 @@ extern "C" void app_main(void)
         tensor_arena,
         r1.high_res);
 
-    dump_output_tensor(r2.logits, "M2 logits2");
+    dump_output_tensor(r2.logits, "M2 logits");
     dump_output_tensor(r2.mid_res, "M2 mid_res");
 
     // ---- M3 ----
@@ -353,7 +401,11 @@ extern "C" void app_main(void)
         r2.mid_res
     );
 
-    dump_output_tensor(r3.logits, "M3 logits3");
+    dump_output_tensor(r3.logits, "M3 logits");
+
+    TensorBuffer pred3 = logits_to_prediction(r3.logits, 0.5f);
+    dump_output_tensor(pred3, "M3 prediction");
+
 
     heap_caps_free(r1.high_res.data);
     heap_caps_free(r1.logits.data);
