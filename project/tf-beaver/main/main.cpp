@@ -128,6 +128,7 @@ ModelResult run_m1(
 {
     ModelResult result = {};
 
+    ESP_LOGI(TAG, "===== MODEL M1 =====");
     ESP_LOGI(TAG, "Loading model:M1");
     const tflite::Model *model = tflite::GetModel(model_data);
     if (model->version() != TFLITE_SCHEMA_VERSION) {
@@ -203,6 +204,7 @@ ModelResult run_m2(
     static const char * name = "m2";
     ModelResult result = {};
 
+    ESP_LOGI(TAG, "===== MODEL M2 =====");
     ESP_LOGI(TAG, "Loading model: MODEL M2");
     const tflite::Model *model = tflite::GetModel(model_data);
     if (model->version() != TFLITE_SCHEMA_VERSION) {
@@ -233,6 +235,8 @@ ModelResult run_m2(
     TfLiteTensor *input = interpreter.input(0);
     // Copy high_res → M2 input
     memcpy(input->data.int8, high_res.data, input->bytes);
+
+    ESP_LOGI(TAG, "M2 input0 (high_res): bytes=%d", input->bytes);
 
     interpreter.Invoke();
 
@@ -268,6 +272,7 @@ ModelResult run_m3(
 {
     ModelResult result = {};
 
+    ESP_LOGI(TAG, "===== MODEL M3 =====");
     ESP_LOGI(TAG, "Loading model: MODEL M3");
     const tflite::Model *model = tflite::GetModel(model_data);
     if (model->version() != TFLITE_SCHEMA_VERSION) {
@@ -276,7 +281,7 @@ ModelResult run_m3(
         return result;
     }
 
-    ESP_LOGI(TAG, "M3: will create resolver.");
+    // ESP_LOGI(TAG, "M3: will create resolver.");
     tflite::MicroMutableOpResolver<11> resolver;
     resolver.AddAdd();
     resolver.AddConcatenation();
@@ -290,7 +295,7 @@ ModelResult run_m3(
     resolver.AddResizeBilinear();
     resolver.AddStridedSlice();
 
-    ESP_LOGI(TAG, "M3: will create interpreter.");
+    // ESP_LOGI(TAG, "M3: will create interpreter.");
     static tflite::MicroInterpreter interpreter(model, resolver, arena, kTensorArenaSize);
     TfLiteStatus allocate_status = interpreter.AllocateTensors();
     if (allocate_status != kTfLiteOk) {
@@ -307,11 +312,11 @@ ModelResult run_m3(
 
     // Copy high_res → input0
     memcpy(input0->data.int8, high_res.data, input0->bytes);
-    ESP_LOGI(TAG, "M3: after copying high_res.");
+    // ESP_LOGI(TAG, "M3: after copying high_res.");
 
     // Copy mid_res → input1
     memcpy(input1->data.int8, mid_res.data, input1->bytes);
-    ESP_LOGI(TAG, "M3: after copying mid_res.");
+    // ESP_LOGI(TAG, "M3: after copying mid_res.");
 
     ESP_LOGI(TAG, "MODEL M3 running inference...");
     if (interpreter.Invoke() != kTfLiteOk) {
