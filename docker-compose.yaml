@@ -24,6 +24,7 @@ services:
     image: esp-idf-dev
     volumes:
       - ${PROJECT_PATH:-./project}:/project
+      - /home/henri/devel/beaver-adapt/tf-beaver:/project/tf-beaver
       - /dev:/dev
     device_cgroup_rules:
       - 'c 166:* rmw'   # 166 is the character device major number for /dev/ttyACM*
